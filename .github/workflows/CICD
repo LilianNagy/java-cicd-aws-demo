@@ -1,0 +1,60 @@
+name: Java App CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - develop
+      - master
+env:
+  VERSION_TAG: ${{ github.run_id }}
+  APP_NAME: java-app
+  DOCKER_CONTEXT: ${{ github.workspace }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    env:
+      GIT_SSL_NO_VERIFY: true
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+
+      - name: Build with Maven
+        run: mvn clean package
+
+      - name: Docker Login
+        run: docker login ${{ secrets.DOCKER_REGISTRY }} -u ${{ secrets.DOCKER_USERNAME }} -p ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${{ secrets.DOCKER_REGISTRY }}/${{ env.APP_NAME }}:${{ env.VERSION_TAG }} .
+          docker push ${{ secrets.DOCKER_REGISTRY }}/${{ env.APP_NAME }}:${{ env.VERSION_TAG }}
+
+  deploy-dev:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Deploy to Dev
+        run: echo "Deploying to DEV environment with tag ${{ env.VERSION_TAG }}"
+
+  deploy-test:
+    needs: deploy-dev
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop'
+    steps:
+      - name: Deploy to Test
+        run: echo "Deploying to TEST environment with tag ${{ env.VERSION_TAG }}"
+
+  deploy-stg:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - name: Deploy to Staging
+        run: echo "Deploying to STAGING environment with tag ${{ env.VERSION_TAG }}"
